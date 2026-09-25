@@ -3,7 +3,7 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import ts from 'typescript';
 // Compile the same production modules for a Node-based geometry/API check.
 const directory=new URL('../.sites-runtime/tests/',import.meta.url);await mkdir(directory,{recursive:true});
-for(const name of ['arc','model','joints','wall-trace','example-plan','example-plan-2','analysis','scene','openings','remote','product','pdf-vector','units','edits','rooms','changes','history']){const source=await readFile(new URL(`../lib/editor/${name}.ts`,import.meta.url),'utf8');const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll("'./model'","'./model.js'").replaceAll("'./arc'","'./arc.js'").replaceAll("'./joints'","'./joints.js'").replaceAll("'./wall-trace'","'./wall-trace.js'").replaceAll("'./example-plan'","'./example-plan.js'").replaceAll("'./example-plan-2'","'./example-plan-2.js'").replaceAll("'./pdf-vector'","'./pdf-vector.js'").replaceAll("'./remote'","'./remote.js'").replaceAll("'./openings'","'./openings.js'").replaceAll("'./edits'","'./edits.js'").replaceAll("'./rooms'","'./rooms.js'");await writeFile(new URL(`${name}.js`,directory),js)}
+for(const name of ['arc','model','joints','wall-trace','example-plan','example-plan-2','analysis','scene','openings','remote','product','pdf-vector','units','edits','rooms','changes','history','journal']){const source=await readFile(new URL(`../lib/editor/${name}.ts`,import.meta.url),'utf8');const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll("'./model'","'./model.js'").replaceAll("'./arc'","'./arc.js'").replaceAll("'./joints'","'./joints.js'").replaceAll("'./wall-trace'","'./wall-trace.js'").replaceAll("'./example-plan'","'./example-plan.js'").replaceAll("'./example-plan-2'","'./example-plan-2.js'").replaceAll("'./pdf-vector'","'./pdf-vector.js'").replaceAll("'./remote'","'./remote.js'").replaceAll("'./openings'","'./openings.js'").replaceAll("'./edits'","'./edits.js'").replaceAll("'./rooms'","'./rooms.js'");await writeFile(new URL(`${name}.js`,directory),js)}
 const routeSource=await readFile(new URL('../app/api/analyze/route.ts',import.meta.url),'utf8');await writeFile(new URL('route.js',directory),ts.transpileModule(routeSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll("'@/lib/editor/analysis'","'./analysis.js'"));
 const {exampleProject,validateProject,moveEntity,rescale,length,catalog,round}=await import(new URL('model.js',directory));
 const {exampleRooms}=await import(new URL('example-plan.js',directory));
@@ -401,4 +401,40 @@ console.log('PASS: extraction vectorielle — échelle, pièces, épaisseurs, ba
  assert.deepEqual(doc.existing.rooms.map(r=>[r.name,r.area,r.source]),[['A',5.18,'imprimée'],['B',5.2,'imprimée']]);
  assert.deepEqual(doc.proposed.rooms.map(r=>[r.name,r.source]),[['Séjour','recalculée']]);
  console.log('PASS: pièces — porte sans fusion, surfaces imprimées tant qu’inchangées, refend supprimé = pièce réunie recalculée, renommage, 9 pièces de l’exemple, pièces avant/après dans le JSON.');
+}
+{
+ const {startWork,reopenSurvey,resetWork,record,describe}=await import(new URL('journal.js',directory));
+ const {diffWalls}=await import(new URL('changes.js',directory));
+ const {removeWall,splitWall,newWallSize}=await import(new URL('edits.js',directory));
+ const {moveWall}=await import(new URL('joints.js',directory));
+ const at='2026-09-25T10:00:00.000Z';
+ const base=validateProject(startWork(exampleProject(),at));
+ assert.deepEqual(base.existing.walls,base.walls,'le plan chargé devient l’existant');assert.deepEqual(base.journal,[]);
+ assert.equal(diffWalls(base.existing.walls,base.walls).count,0,'plan chargé : aucune modification');
+ // dessiner un mur : « construit », à la hauteur du plan
+ const size=newWallSize(base,{x:1,y:1},{x:3,y:1});assert.equal(size.height,2.73,'hauteur sous plafond du plan');
+ const drawn={...base,walls:[...base.walls,{id:'neuf',name:'Mur neuf',a:{x:1,y:1},b:{x:3,y:1},...size,openings:[]}]};
+ const j1=record(base,drawn,{at});assert.equal(j1.journal.length,1);assert.equal(j1.journal[0].kind,'built');assert.equal(j1.journal[0].label,'Mur neuf construit');assert.equal(j1.journal[0].detail,'2,00 m');assert.deepEqual(j1.journal[0].point,{x:2,y:1});
+ // redessiner un mur existant reprend ses dimensions
+ const w0=base.walls[0];assert.deepEqual(newWallSize(base,w0.a,w0.b),{height:w0.height,thickness:w0.thickness});
+ // supprimer un mur : « démoli », même si ses voisins sont recollés
+ const target=base.walls[3],j2=record(j1,removeWall(j1,target.id),{subject:target.id,at});
+ assert.equal(j2.journal.length,2);assert.equal(j2.journal[1].kind,'demolished');assert.equal(j2.journal[1].label,`${target.name} démoli`);
+ // couper, déplacer ; une rafale de flèches ne fait qu'une entrée
+ assert.equal(describe(base,splitWall(base,w0.id,.5)).kind,'split');
+ const nudge1=record(base,moveWall(base,w0.id,.01,0),{subject:w0.id,at}),nudge2=record(nudge1,moveWall(nudge1,w0.id,.01,0),{subject:w0.id,merge:true,at});
+ assert.equal(nudge1.journal[0].kind,'moved');assert.equal(nudge2.journal.length,1,'flèches : une seule entrée');assert.equal(nudge2.journal[0].id,nudge1.journal[0].id);
+ // baies
+ const withDoor={...base,walls:base.walls.map((w,i)=>i?w:{...w,openings:[...w.openings,{id:'p-neuve',kind:'door',offset:.5,width:.8,height:2,sill:0}]})};
+ assert.equal(describe(base,withDoor).kind,'opening-added');assert.equal(describe(withDoor,base).kind,'opening-removed');
+ // renommer, mobilier, ou relevé en cours : rien au journal
+ assert.equal(describe(base,{...base,name:'X',walls:base.walls.map(w=>({...w,name:w.name+'!'}))}),null);
+ const survey=reopenSurvey(j2);assert.equal(survey.existing,null);assert.deepEqual(survey.journal,[]);assert.deepEqual(survey.walls,base.existing.walls,'corriger l’existant repart de l’existant');
+ assert.deepEqual(record(survey,{...survey,walls:drawn.walls}).journal,[],'relevé : les corrections ne sont pas des travaux');
+ // tout annuler, recharger : journal vide, aucun poste
+ const reset=resetWork(j2);assert.deepEqual(reset.journal,[]);assert.equal(diffWalls(reset.existing.walls,reset.walls).count,0);
+ const reloaded=startWork(exampleProject());assert.deepEqual(reloaded.journal,[]);
+ // le journal survit à la validation et à la mise à l'échelle
+ const scaled=rescale(validateProject(j2),2);assert.deepEqual(scaled.journal[0].point,{x:4,y:2});
+ console.log('PASS: journal — plan chargé = existant, mur construit / démoli / coupé / déplacé, rafale fusionnée, baies, relevé non compté, tout annuler.');
 }

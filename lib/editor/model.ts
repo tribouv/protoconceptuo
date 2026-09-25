@@ -11,16 +11,21 @@ export const itemSchema = z.object({ id: z.string().max(100), name: z.string().m
 // Étiquette de pièce : nom et position ; `printed` = surface imprimée par l'architecte. Les pièces
 // elles-mêmes sont calculées à partir des murs (voir rooms.ts).
 export const labelSchema = z.object({ name: z.string().max(80), x: z.number().finite(), y: z.number().finite(), printed: z.number().positive().max(10000).optional() });
+// Journal des actions faites depuis que le plan est l'existant (voir journal.ts). Il vit dans le projet :
+// annuler / rétablir le fait suivre sans autre logique.
+export const journalKinds = ['built', 'demolished', 'moved', 'modified', 'split', 'merged', 'opening-added', 'opening-removed', 'opening-modified'] as const;
+export const journalEntrySchema = z.object({ id: z.string().max(100), at: z.string().max(40), kind: z.enum(journalKinds), label: z.string().max(200), detail: z.string().max(200).optional(), point: pointSchema.optional(), wallId: z.string().max(100).optional() });
 // background.scale : mètres par point PDF, pour retrouver une position sur la page d'origine (x_pt = x / scale).
-// existing : l'existant validé (étape « Relevé »), référence des démolitions et constructions (voir changes.ts).
-// Absent ou null : le relevé est en cours.
-export const projectSchema = z.object({ version: z.literal(1), name: z.string().max(120), walls: z.array(wallSchema).max(200), items: z.array(itemSchema).max(100), labels: z.array(labelSchema).max(100), background: z.object({ data: z.string().max(8000000).regex(/^data:image\/(png|jpeg|webp);base64,/), width: z.number().positive().max(200), height: z.number().positive().max(200), fileName: z.string().max(200), page: z.number().int().positive(), scale: z.number().positive().optional() }).nullable(), calibrated: z.boolean(), assets: z.record(z.string().max(40000000).regex(/^data:model\/gltf-binary;base64,/)).default({}), existing: z.object({ walls: z.array(wallSchema).max(200), labels: z.array(labelSchema).max(100).optional(), validatedAt: z.string().max(40) }).nullable().optional() });
+// existing : l'existant, référence des démolitions et constructions (voir changes.ts). Figé dès qu'un plan est
+// chargé ; absent ou null : relevé en cours (« Corriger l'existant », ou PDF sans tracé exploitable).
+export const projectSchema = z.object({ version: z.literal(1), name: z.string().max(120), walls: z.array(wallSchema).max(200), items: z.array(itemSchema).max(100), labels: z.array(labelSchema).max(100), background: z.object({ data: z.string().max(8000000).regex(/^data:image\/(png|jpeg|webp);base64,/), width: z.number().positive().max(200), height: z.number().positive().max(200), fileName: z.string().max(200), page: z.number().int().positive(), scale: z.number().positive().optional() }).nullable(), calibrated: z.boolean(), assets: z.record(z.string().max(40000000).regex(/^data:model\/gltf-binary;base64,/)).default({}), existing: z.object({ walls: z.array(wallSchema).max(200), labels: z.array(labelSchema).max(100).optional(), validatedAt: z.string().max(40) }).nullable().optional(), journal: z.array(journalEntrySchema).max(500).optional() });
 export type Point = z.infer<typeof pointSchema>;
 export type Opening = z.infer<typeof openingSchema>;
 export type Wall = z.infer<typeof wallSchema>;
 export type Item = z.infer<typeof itemSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type Label = z.infer<typeof labelSchema>;
+export type JournalEntry = z.infer<typeof journalEntrySchema>;
 export type Tool = 'select' | 'wall' | 'scale' | 'door' | 'window';
 export const uid = () => crypto.randomUUID();
 /** Longueur développée : longueur d'arc pour un mur courbe. */
@@ -61,7 +66,7 @@ export function moveEntity(p: Project, id: string, dx: number, dy: number): Proj
 }
 export function rescale(p: Project, factor: number): Project {
     const scaleWall = (w: Wall): Wall => ({ ...w, a: { x: w.a.x * factor, y: w.a.y * factor }, b: { x: w.b.x * factor, y: w.b.y * factor }, openings: w.openings.map(o => ({ ...o, width: o.width * factor })) });
-    return { ...p, calibrated: true, background: p.background ? { ...p.background, width: p.background.width * factor, height: p.background.height * factor, ...(p.background.scale ? { scale: p.background.scale * factor } : {}) } : null, walls: p.walls.map(scaleWall), ...(p.existing ? { existing: { ...p.existing, walls: p.existing.walls.map(scaleWall), ...(p.existing.labels ? { labels: p.existing.labels.map(l => ({ ...l, x: l.x * factor, y: l.y * factor })) } : {}) } } : {}), items: p.items.map(i => ({ ...i, x: i.x * factor, y: i.y * factor })), labels: p.labels.map(l => ({ ...l, x: l.x * factor, y: l.y * factor })) };
+    return { ...p, calibrated: true, background: p.background ? { ...p.background, width: p.background.width * factor, height: p.background.height * factor, ...(p.background.scale ? { scale: p.background.scale * factor } : {}) } : null, walls: p.walls.map(scaleWall), ...(p.existing ? { existing: { ...p.existing, walls: p.existing.walls.map(scaleWall), ...(p.existing.labels ? { labels: p.existing.labels.map(l => ({ ...l, x: l.x * factor, y: l.y * factor })) } : {}) } } : {}), items: p.items.map(i => ({ ...i, x: i.x * factor, y: i.y * factor })), labels: p.labels.map(l => ({ ...l, x: l.x * factor, y: l.y * factor })), ...(p.journal ? { journal: p.journal.map(e => e.point ? { ...e, point: { x: e.point.x * factor, y: e.point.y * factor } } : e) } : {}) };
 }
 export function validateProject(value: unknown): Project {
     const p = projectSchema.parse(value);

@@ -277,3 +277,18 @@ export function squareCorner(p: Project, id: string, end: 'a' | 'b'): Project {
     if (Math.abs(Math.atan2(Math.sin(target - theta), Math.cos(target - theta))) < 1e-4) return p;
     return moveJunction(p, id, other(end), snap({ x: pivot.x + Math.cos(target) * L, y: pivot.y + Math.sin(target) * L }));
 }
+
+/**
+ * Hauteur et épaisseur d'un mur dessiné de `a` à `b`. Tracé sur un mur de l'existant (on reconstruit ce
+ * qu'on a démoli) : les siennes, pour ne pas le compter comme redimensionné. Sinon la hauteur la plus
+ * courante du plan (celle sous plafond) et une cloison de 15 cm.
+ */
+export function newWallSize(p: Project, a: Point, b: Point): { height: number; thickness: number } {
+    const onAxis = (w: Wall, q: Point) => { if (sweep(w)) return false; const t = pointAt(w, along(w, q)).point; return Math.hypot(t.x - q.x, t.y - q.y) < .02; };
+    const under = [...(p.existing?.walls ?? []), ...p.walls].find(w => onAxis(w, a) && onAxis(w, b));
+    if (under) return { height: under.height, thickness: under.thickness };
+    const counts = new Map<number, number>();
+    for (const w of p.walls) counts.set(w.height, (counts.get(w.height) ?? 0) + 1);
+    const height = [...counts].sort((x, y) => y[1] - x[1])[0]?.[0] ?? 2.6;
+    return { height, thickness: .15 };
+}

@@ -45,7 +45,9 @@ Le ZIP contient les sources et le lockfile, sans node_modules, historique Git, c
 
 ## Export des modifications (devis Conceptuo)
 
-Le parcours a deux étapes. Pendant le **relevé de l’existant**, on corrige l’extraction du PDF, et rien n’est compté comme travaux. **Valider l’existant** fige une copie des murs dans `project.existing`. Ensuite, chaque écart avec cette copie est un poste de travaux. Toutes les modifications se font dans le plan 2D : la 3D en est une représentation en lecture seule.
+Dès qu’un plan est chargé, une copie de ses murs est figée dans `project.existing` (`startWork`, `lib/editor/journal.ts`) : chaque écart avec cette copie est un poste de travaux. `existing` nul signifie « relevé en cours » : c’est le cas après **Corriger l’existant**, ou pour un PDF sans tracé exploitable. Les corrections du relevé ne comptent pas comme travaux, et **Terminer le relevé** fige le nouvel existant.
+
+**Journal.** `project.journal` liste les actions faites depuis que l’existant est figé : `{ id, at, kind, label, detail?, point?, wallId? }`, avec `kind` parmi `built`, `demolished`, `moved`, `modified`, `split`, `merged`, `opening-added`, `opening-removed`, `opening-modified`. Chaque entrée est déduite en comparant le projet avant et après la modification (`describe`), si bien que tous les chemins d’édition sont couverts sans être annotés un à un. Le journal vit dans le projet : annuler ou rétablir le fait suivre. Il sert à l’affichage ; le bilan des postes reste calculé par comparaison géométrique, ci-dessous. Renommer un mur ou déplacer du mobilier n’y figure pas. Toutes les modifications se font dans le plan 2D : la 3D en est une représentation en lecture seule.
 
 **Principe.** On compare des géométries, jamais des identifiants de murs, parce que couper, fusionner ou recoller un mur change ses identifiants. Pour chaque mur existant, on garde les portions de son axe couvertes par un mur actuel sur le même axe (écart d’angle inférieur à 0,5°, écart d’axe inférieur à 2 cm) :
 - ce qui n’est plus couvert est **démoli** ;
