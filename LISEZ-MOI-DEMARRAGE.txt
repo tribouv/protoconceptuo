@@ -1,0 +1,26 @@
+CONCEPTUO — ATELIER 3D
+Archive des sources locales du 22 septembre 2026.
+
+1. Décompresser intégralement ce ZIP dans un dossier local.
+2. Installer Node.js 24 avec npm.
+3. Ouvrir un terminal dans Conceptuo-Atelier-3D (où se trouve package.json).
+4. Exécuter :
+   npm ci
+   npm run dev
+5. Ouvrir http://localhost:5173 ; garder le terminal ouvert.
+   Ctrl+C arrête le serveur.
+
+Un accès Internet est nécessaire pour installer les dépendances.
+L’éditeur et le projet exemple fonctionnent sans clé API.
+OpenAI : clé et crédits nécessaires pour analyser les plans et fiches produit.
+Meshy : clé et crédits nécessaires pour générer les objets 3D depuis une photo.
+Claude Design et TRELLIS.2 ne sont pas intégrés.
+Aucun compte Codex ou Sites n’est requis pour le lancement local.
+
+Lire GUIDE-DEVELOPPEURS.md pour l’architecture, les limites et les vérifications.
+Le dossier .openai est nécessaire à la configuration : conserver les fichiers cachés.
+L’archive ne contient pas les projets enregistrés dans le navigateur du propriétaire.
+Pour les transmettre, joindre séparément leurs exports JSON depuis l’application.
+
+Cette archive contient le prototype Atelier 3D et les corrections locales ;
+elle ne constitue pas l’implémentation de la V2 décrite dans le document de Lynx Business.
